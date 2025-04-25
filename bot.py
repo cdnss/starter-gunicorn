@@ -153,7 +153,7 @@ async def download_with_ytdlp(url, status_message: Message):
     ]
 
     # --- Tambahkan argumen cookies jika COOKIES_FILE_PATH disetel ---
-    # Periksa lagi keberadaan file saat menjalankan subprocess, lebih aman
+    # Periksa lagi keberadaan file cookies saat menjalankan subprocess, lebih aman
     if COOKIES_FILE_PATH and os.path.exists(COOKIES_FILE_PATH):
          logging.info(f"Menambahkan argumen cookies: --cookies {COOKIES_FILE_PATH}")
          ytdlp_command.extend(["--cookies", COOKIES_FILE_PATH])
@@ -247,12 +247,17 @@ async def download_with_ytdlp(url, status_message: Message):
                         if current_time - last_update_time > 3 or percent == 1.0:
                              if progress_text != last_progress_text: # Hanya edit jika teks berubah
                                   try:
+                                      # await status_message.edit_text(progress_text, parse_mode=ParseMode.MARKDOWN)
                                       # Menggunakan edit_text dengan disable_web_page_preview=True karena URL di pesan
                                       await status_message.edit_text(progress_text, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
                                       last_update_time = current_time
                                       last_progress_text = progress_text
+                                      # logging.debug(f"Pesan progres diupdate untuk {url}: {percent_str}")
                                   except Exception as edit_e:
                                       # Tangani FloodWait atau error edit lainnya
+                                      # logging.warning(f"Gagal mengedit pesan progres untuk {url}: {edit_e}")
+                                      # Jika error adalah FloodWait, Pyrogram sering menghandle internal, tapi mungkin perlu logic retry
+                                      # Jika error lain, mungkin ada masalah dengan pesan atau koneksi Telegram
                                       pass # Biarkan logging di atas yang handle
 
                 else:
@@ -262,7 +267,9 @@ async def download_with_ytdlp(url, status_message: Message):
             except json.JSONDecodeError:
                 # Jika output bukan JSON (misalnya, pesan error lain dari yt-dlp yang tidak dalam format JSON)
                 logging.warning(f"Output non-JSON dari yt-dlp stderr: {line}")
-
+                # Anda bisa menambahkan logic untuk menampilkan pesan non-progress penting ini ke user
+                # Tapi hati-hati agar tidak spam chat.
+                # Contoh: await status_message.reply_text(f"Info dari downloader: {line}")
 
         # --- Menunggu Proses yt-dlp Selesai dan Memeriksa Return Code ---
         returncode = await process.wait() # Tunggu proses yt-dlp selesai sepenuhnya
@@ -304,9 +311,17 @@ async def download_with_ytdlp(url, status_message: Message):
 
                 if not downloaded_file_path:
                      # Fallback jika 'filepath' tidak ada (kurang handal)
+                     # Perlu memastikan template output di awal sama persis dengan yang dipakai yt-dlp
+                     # dan karakter ilegal dihandle seperti --restrict-filenames
+                     # Mengandalkan 'filepath' di JSON adalah cara terbaik
                      logging.warning("Properti 'filepath' tidak ditemukan di output -j. Rekonstruksi path mungkin tidak akurat.")
+                     # Jika tidak ada filepath, Anda mungkin perlu logika yang lebih canggih
+                     # atau asumsikan nama file berdasarkan title dan ext jika template -o sederhana.
+                     # Contoh rekonstruksi sangat sederhana (bisa salah):
                      title = info.get('title', 'download')
                      ext = info.get('ext', 'mp4')
+                     # Membersihkan nama file agar sesuai dengan --restrict-filenames butuh regex
+                     # Pola yt-dlp bisa bervariasi, ini hanya contoh
                      cleaned_title = re.sub(r'[^\w\s.-]', '', title).replace(' ', '_')
                      downloaded_file_path = os.path.join(DOWNLOAD_DIR, f"{cleaned_title}.{ext}")
                      logging.warning(f"Mencoba merekonstruksi path: {downloaded_file_path}")
@@ -399,7 +414,8 @@ Saya akan berusaha mengunduh video tersebut dan mengirimkannya kepada Anda.
 *Pastikan Anda menggunakan perintah ini di chat pribadi dengan bot.*
     """
     # Mengirim pesan balasan ke pengguna menggunakan Markdown
-    await message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
+    # Menggunakan parse_mode=ParseMode.MARKDOWN
+    await message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True) # disable_web_page_preview=True agar link contoh tidak menampilkan preview
 
 
 # Handler untuk perintah /download
@@ -413,6 +429,7 @@ async def handle_download_command(client: Client, message: Message):
 
     # Memeriksa apakah URL disediakan setelah perintah
     if len(message.command) < 2:
+        # Menggunakan parse_mode=ParseMode.MARKDOWN
         await message.reply_text("Mohon berikan URL setelah perintah /download. Contoh: `/download <link_video>`", parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
         logging.warning(f"Received /download command without URL from chat ID: {chat_id}")
         return
@@ -502,43 +519,54 @@ async def handle_download_command(client: Client, message: Message):
              await client.send_message(chat_id, f"❌ Unduhan gagal untuk `{url}`.\nError: `{error_message}`", parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
 
+    # Opsional: Membersihkan direktori unduhan secara berkala atau setelah setiap unduhan
+    # Jika DOWNLOAD_DIR hanya digunakan oleh satu proses download pada satu waktu, bisa dibersihkan.
+    # Jika multiple concurrent downloads mungkin terjadi, ini TIDAK AMAN.
+    # Pendekatan yang lebih aman adalah memastikan setiap file dihapus setelah diproses.
+    # Kode cleanup os.remove() di atas lebih disarankan.
+
+
 # --- Menjalankan Bot dan Health Check Server ---
-if __name__ == '__main__':
-    logging.info("Memulai aplikasi bot dengan asyncio.run()...")
+# --- Menjalankan Bot dan Health Check Server ---
+# Struktur terbaik dengan Pyrogram async:
+async def main():
+    logging.info("Memulai aplikasi bot dan health check server...")
+    # 1. Mulai Health Check Server sebagai task
+    health_server_task = asyncio.create_task(start_health_server())
+    logging.info("Health check server task created.")
+
+    # 2. Start Pyrogram Client (async)
+    # Ini akan terhubung dan mengotentikasi bot
+    await app.start()
+    logging.info("Pyrogram Client terhubung ke Telegram.")
+    logging.info("Bot siap menerima perintah.")
+
+    # Keep the event loop running indefinitely to process updates and tasks
+    # This await Future() will block the main coroutine until cancelled (e.g., via signal)
     try:
-        async def main():
-            logging.info("Memulai aplikasi bot dan health check server...")
-            # 1. Mulai Health Check Server sebagai task
-            health_server_task = asyncio.create_task(start_health_server())
-            logging.info("Health check server task created.")
-
-            try:
-                # 2. Start Pyrogram Client (async)
-                await app.start()
-                logging.info("Pyrogram Client terhubung ke Telegram.")
-                logging.info("Bot siap menerima perintah.")
-
-                # Biarkan event loop berjalan tanpa batas untuk memproses update dan task
-                # await Future() ini akan memblokir coroutine utama sampai dibatalkan (misalnya, via sinyal)
-                await asyncio.get_event_loop().create_future()
-
-            except asyncio.CancelledError:
-                logging.info("Task utama dibatalkan. Memulai shutdown.")
-            except Exception as e:
-                logging.error(f"Error di coroutine utama: {e}")
-            finally:
-                # Blok finally ini berjalan ketika coroutine utama selesai (e.g., due to cancellation or error)
-                logging.info("Menghentikan klien Pyrogram...")
-                await app.stop() # Await coroutine stop di dalam konteks async
-                logging.info("Klien Pyrogram dihentikan.")
-                # Anda mungkin juga ingin menambahkan logic di sini untuk membatalkan health_server_task jika diperlukan.
+        await asyncio.get_event_loop().create_future()
+    except asyncio.CancelledError:
+        logging.info("Main task cancelled. Starting shutdown.")
+    finally:
+        # Pindahkan logika cleanup ke sini, di dalam konteks async main()
+        if app and app.is_connected:
+            logging.info("Menghentikan Pyrogram client...")
+            await app.stop() # Gunakan await di sini
+            logging.info("Pyrogram client dihentikan.")
 
 
-        asyncio.run(main()) # Menjalankan fungsi async main()
-
+# Jalankan fungsi async main()
+if __name__ == '__main__':
+    logging.info("Memulai aplikasi bot dan health check server...")
+    try:
+        # asyncio.run() akan membuat loop baru, menjalankannya sampai main() selesai, lalu menutup loop.
+        # Ini adalah cara modern yang disarankan.
+        asyncio.run(main())
     except Exception as e:
         # Menangkap exception fatal saat menjalankan asyncio.run(main())
         logging.error(f"Error fatal saat menjalankan asyncio.run(main()): {e}")
         sys.exit(1) # Keluar dari proses dengan kode error
 
-    logging.info("Proses bot berakhir.")
+    # Blok finally di sini (level teratas) tidak lagi perlu menangani app.stop()
+    # Kode cleanup ini akan berjalan jika proses Python berakhir
+    logging.info("Proses shutdown bot selesai.")
