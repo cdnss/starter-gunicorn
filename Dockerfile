@@ -60,7 +60,7 @@ ARG DOWNLOAD_DIR="/app/downloads"
 RUN mkdir -p $DOWNLOAD_DIR
 
 # Expose port jika Anda menjalankan aria2c RPC server di dalam container (tidak umum)
-EXPOSE 6800
+EXPOSE 8080
 
 # Definisikan Environment Variables untuk konfigurasi bot
 # Nilai default bisa dikosongkan atau diisi placeholder
