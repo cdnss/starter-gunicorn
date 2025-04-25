@@ -210,7 +210,7 @@ if ARIA2_RPC_URL:
         # ARIA2_RPC_URL harus menjadi nama service/container aria2c.
         aria2 = aria2p.API(aria2p.Client(host=ARIA2_RPC_URL, secret=ARIA2_RPC_SECRET))
         # Cek apakah aria2c RPC berjalan dengan mencoba memanggil fungsi
-        version = aria2.get_version()
+        version = aria2.client.get_version()
         logging.info(f"Terhubung ke Aria2c RPC versi: {version.version} di {ARIA2_RPC_URL}")
     except Exception as e:
         logging.error(f"Gagal terhubung ke Aria2c RPC di {ARIA2_RPC_URL}: {e}")
