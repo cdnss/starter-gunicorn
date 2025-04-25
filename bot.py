@@ -153,7 +153,7 @@ async def download_with_ytdlp(url, status_message: Message):
     ]
 
     # --- Tambahkan argumen cookies jika COOKIES_FILE_PATH disetel ---
-    # Periksa lagi keberadaan file cookies saat menjalankan subprocess, lebih aman
+    # Periksa lagi keberadaan file saat menjalankan subprocess, lebih aman
     if COOKIES_FILE_PATH and os.path.exists(COOKIES_FILE_PATH):
          logging.info(f"Menambahkan argumen cookies: --cookies {COOKIES_FILE_PATH}")
          ytdlp_command.extend(["--cookies", COOKIES_FILE_PATH])
@@ -247,17 +247,12 @@ async def download_with_ytdlp(url, status_message: Message):
                         if current_time - last_update_time > 3 or percent == 1.0:
                              if progress_text != last_progress_text: # Hanya edit jika teks berubah
                                   try:
-                                      # await status_message.edit_text(progress_text, parse_mode=ParseMode.MARKDOWN)
                                       # Menggunakan edit_text dengan disable_web_page_preview=True karena URL di pesan
                                       await status_message.edit_text(progress_text, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
                                       last_update_time = current_time
                                       last_progress_text = progress_text
-                                      # logging.debug(f"Pesan progres diupdate untuk {url}: {percent_str}")
                                   except Exception as edit_e:
                                       # Tangani FloodWait atau error edit lainnya
-                                      # logging.warning(f"Gagal mengedit pesan progres untuk {url}: {edit_e}")
-                                      # Jika error adalah FloodWait, Pyrogram sering menghandle internal, tapi mungkin perlu logic retry
-                                      # Jika error lain, mungkin ada masalah dengan pesan atau koneksi Telegram
                                       pass # Biarkan logging di atas yang handle
 
                 else:
@@ -267,9 +262,7 @@ async def download_with_ytdlp(url, status_message: Message):
             except json.JSONDecodeError:
                 # Jika output bukan JSON (misalnya, pesan error lain dari yt-dlp yang tidak dalam format JSON)
                 logging.warning(f"Output non-JSON dari yt-dlp stderr: {line}")
-                # Anda bisa menambahkan logic untuk menampilkan pesan non-progress penting ini ke user
-                # Tapi hati-hati agar tidak spam chat.
-                # Contoh: await status_message.reply_text(f"Info dari downloader: {line}")
+
 
         # --- Menunggu Proses yt-dlp Selesai dan Memeriksa Return Code ---
         returncode = await process.wait() # Tunggu proses yt-dlp selesai sepenuhnya
@@ -311,17 +304,9 @@ async def download_with_ytdlp(url, status_message: Message):
 
                 if not downloaded_file_path:
                      # Fallback jika 'filepath' tidak ada (kurang handal)
-                     # Perlu memastikan template output di awal sama persis dengan yang dipakai yt-dlp
-                     # dan karakter ilegal dihandle seperti --restrict-filenames
-                     # Mengandalkan 'filepath' di JSON adalah cara terbaik
                      logging.warning("Properti 'filepath' tidak ditemukan di output -j. Rekonstruksi path mungkin tidak akurat.")
-                     # Jika tidak ada filepath, Anda mungkin perlu logika yang lebih canggih
-                     # atau asumsikan nama file berdasarkan title dan ext jika template -o sederhana.
-                     # Contoh rekonstruksi sangat sederhana (bisa salah):
                      title = info.get('title', 'download')
                      ext = info.get('ext', 'mp4')
-                     # Membersihkan nama file agar sesuai dengan --restrict-filenames butuh regex
-                     # Pola yt-dlp bisa bervariasi, ini hanya contoh
                      cleaned_title = re.sub(r'[^\w\s.-]', '', title).replace(' ', '_')
                      downloaded_file_path = os.path.join(DOWNLOAD_DIR, f"{cleaned_title}.{ext}")
                      logging.warning(f"Mencoba merekonstruksi path: {downloaded_file_path}")
@@ -414,8 +399,7 @@ Saya akan berusaha mengunduh video tersebut dan mengirimkannya kepada Anda.
 *Pastikan Anda menggunakan perintah ini di chat pribadi dengan bot.*
     """
     # Mengirim pesan balasan ke pengguna menggunakan Markdown
-    # Menggunakan parse_mode=ParseMode.MARKDOWN
-    await message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True) # disable_web_page_preview=True agar link contoh tidak menampilkan preview
+    await message.reply_text(welcome_message, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
 
 # Handler untuk perintah /download
@@ -429,7 +413,6 @@ async def handle_download_command(client: Client, message: Message):
 
     # Memeriksa apakah URL disediakan setelah perintah
     if len(message.command) < 2:
-        # Menggunakan parse_mode=ParseMode.MARKDOWN
         await message.reply_text("Mohon berikan URL setelah perintah /download. Contoh: `/download <link_video>`", parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
         logging.warning(f"Received /download command without URL from chat ID: {chat_id}")
         return
@@ -519,164 +502,43 @@ async def handle_download_command(client: Client, message: Message):
              await client.send_message(chat_id, f"❌ Unduhan gagal untuk `{url}`.\nError: `{error_message}`", parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
 
-    # Opsional: Membersihkan direktori unduhan secara berkala atau setelah setiap unduhan
-    # Jika DOWNLOAD_DIR hanya digunakan oleh satu proses download pada satu waktu, bisa dibersihkan.
-    # Jika multiple concurrent downloads mungkin terjadi, ini TIDAK AMAN.
-    # Pendekatan yang lebih aman adalah memastikan setiap file dihapus setelah diproses.
-    # Kode cleanup os.remove() di atas lebih disarankan.
-
-
-# --- Menjalankan Bot dan Health Check Server ---
 # --- Menjalankan Bot dan Health Check Server ---
 if __name__ == '__main__':
-    logging.info("Memulai aplikasi bot dan health check server...")
-    loop = asyncio.get_event_loop() # Mendapatkan event loop asyncio yang sedang berjalan
-
+    logging.info("Memulai aplikasi bot dengan asyncio.run()...")
     try:
-        # 1. Mulai Health Check Server sebagai task asyncio.
-        # create_task() memungkinkan server berjalan di background tanpa memblokir.
-        health_server_task = loop.create_task(start_health_server())
-        logging.info("Health check server task created.")
-
-        # 2. Jalankan Pyrogram Client.
-        # app.run() adalah metode blocking di Pyrogram yang akan:
-        # - Menghubungkan ke Telegram.
-        # - Menjalankan event loop asyncio secara penuh.
-        # - Mendengarkan update (pesan, dll.).
-        # Task asyncio lain (seperti health_server_task) akan berjalan di loop yang sama.
-        logging.info("Running Pyrogram client...")
-        # Gunakan async with app: untuk manajemen siklus hidup yang lebih rapi
-        # await app.start() # Alternatif jika tidak menggunakan async with
-        loop.run_until_complete(app.start()) # Start client secara blocking di startup
-
-        if not app.is_connected:
-             logging.error("Gagal terhubung ke Telegram setelah mencoba start.")
-             sys.exit(1)
-        logging.info("Pyrogram client terhubung ke Telegram.")
-
-
-        # Run idle - Ini akan menjaga loop berjalan dan memproses event
-        # Sampai bot dihentikan (misalnya, via sinyal SIGINT/SIGTERM)
-        # asyncio.get_event_loop().run_forever() # Alternatif jika tidak pakai Pyrogram idle
-
-        # Pyrogram tidak punya idle() yang memblokir seperti telethon.
-        # client.run_until_disconnected(). app.run() sudah melakukan ini.
-        # Jika Anda sudah run app.start() di atas, Anda mungkin perlu menjalankan loop saja
-        # loop.run_forever() # Akan memblokir dan menjalankan task
-        # Atau biarkan app.run() yang menangani start/stop dan idle
-        logging.info("Bot siap menerima perintah.")
-        # app.run() sudah memanggil start() dan menjalankan loop forever.
-        # Memanggil app.start() di atas dan kemudian app.run() di sini adalah redundan/salah.
-        # Cukup panggil app.run() di sini, dan itu akan menangani semuanya.
-        # ATAU panggil app.start() dan kemudian jalankan loop secara manual jika perlu kontrol lebih.
-
-        # Mari kita kembali ke struktur app.run() yang lebih sederhana untuk startup dan loop
-        # app.run() menangani start(), run_forever(), dan stop()
-        # Jadi, hapus app.start() di atas dan gunakan app.run() di sini.
-
-        # Jika Anda sudah menjalankan app.start() di atas, dan ingin loop berjalan,
-        # Anda bisa melakukan:
-        # loop.run_forever() # Ini akan menjalankan loop dan task health_server_task
-
-        # Alternatif terbaik: Gunakan async def main() dan jalankan dengan asyncio.run()
-        # Ini adalah cara modern menjalankan aplikasi asyncio.
         async def main():
             logging.info("Memulai aplikasi bot dan health check server...")
             # 1. Mulai Health Check Server sebagai task
             health_server_task = asyncio.create_task(start_health_server())
             logging.info("Health check server task created.")
 
-            # 2. Start Pyrogram Client dan jalankan loop
-            # app.run() akan memblokir dan menjalankan loop sampai bot berhenti
-            # Ini juga akan start() client secara internal jika belum
-            logging.info("Running Pyrogram client...")
-            await app.start() # Start the client async
-            logging.info("Pyrogram client terhubung ke Telegram.")
-            logging.info("Bot siap menerima perintah.")
-
-            # Keep the event loop running by waiting indefinitely
-            # This allows the health server task and Pyrogram's internal loops to run
-            # This is an alternative to app.run() which handles start/stop and run_forever
-            # Using app.run() is often simpler if you don't need complex startup logic.
-            # If using app.start() and then run_forever():
-            # await asyncio.Future() # Runs forever until cancelled
-
-            # Revert back to simpler app.run() as it's standard for Pyrogram bots
-            # app.run() handles the async start, run_forever, and stop sequence
-
-            # Jika menggunakan app.start() di atas, dan ingin menjalankan loop secara manual:
-            # await asyncio.Future() # Ini akan membuat main() berjalan selamanya sampai di-cancel
-
-            # Cara paling bersih dengan Pyrogram async:
-            await app.start() # Connect and authenticate
-            logging.info("Pyrogram Client terhubung ke Telegram.")
-            logging.info("Bot siap menerima perintah.")
-            # Run indefinitely, processing events and running other tasks
-            await asyncio.get_event_loop().create_future() # This task never completes, keeps loop running
-
-        # Jalankan async def main()
-        # asyncio.run(main()) # Ini akan membuat loop baru, tidak cocok jika loop sudah ada
-        # Kita sudah punya loop dari app.run() sebelumnya atau get_event_loop()
-        # Gunakan run_until_complete atau Future di loop yang ada.
-
-        # Struktur akhir terbaik:
-        # Hapus semua ap p.start() dan run_until_complete(client.connect()) di atas.
-        # Gunakan async def main() dan jalankan dengan asyncio.run() di blok if __name__ == '__main__':
-
-        # Coba struktur async def main() dengan asyncio.run()
-        async def main():
-            logging.info("Memulai aplikasi bot dan health check server...")
-            # 1. Mulai Health Check Server sebagai task
-            health_server_task = asyncio.create_task(start_health_server())
-            logging.info("Health check server task created.")
-
-            # 2. Start Pyrogram Client (async)
-            # Ini akan terhubung dan mengotentikasi bot
-            await app.start()
-            logging.info("Pyrogram Client terhubung ke Telegram.")
-            logging.info("Bot siap menerima perintah.")
-
-            # Keep the event loop running indefinitely to process updates and tasks
-            # This await Future() will block the main coroutine until cancelled (e.g., via signal)
             try:
+                # 2. Start Pyrogram Client (async)
+                await app.start()
+                logging.info("Pyrogram Client terhubung ke Telegram.")
+                logging.info("Bot siap menerima perintah.")
+
+                # Biarkan event loop berjalan tanpa batas untuk memproses update dan task
+                # await Future() ini akan memblokir coroutine utama sampai dibatalkan (misalnya, via sinyal)
                 await asyncio.get_event_loop().create_future()
+
             except asyncio.CancelledError:
-                logging.info("Main task cancelled. Starting shutdown.")
+                logging.info("Task utama dibatalkan. Memulai shutdown.")
+            except Exception as e:
+                logging.error(f"Error di coroutine utama: {e}")
+            finally:
+                # Blok finally ini berjalan ketika coroutine utama selesai (e.g., due to cancellation or error)
+                logging.info("Menghentikan klien Pyrogram...")
+                await app.stop() # Await coroutine stop di dalam konteks async
+                logging.info("Klien Pyrogram dihentikan.")
+                # Anda mungkin juga ingin menambahkan logic di sini untuk membatalkan health_server_task jika diperlukan.
 
-        # Jalankan fungsi async main()
-        # asyncio.run() akan membuat loop baru, menjalankannya sampai main() selesai, lalu menutup loop.
-        # Ini adalah cara modern yang disarankan.
-        asyncio.run(main())
 
+        asyncio.run(main()) # Menjalankan fungsi async main()
 
     except Exception as e:
         # Menangkap exception fatal saat menjalankan asyncio.run(main())
         logging.error(f"Error fatal saat menjalankan asyncio.run(main()): {e}")
         sys.exit(1) # Keluar dari proses dengan kode error
 
-    finally:
-        # Kode cleanup ini akan berjalan jika proses Python berakhir
-        logging.info("Proses bot berakhir. Melakukan cleanup...")
-
-        # Menghentikan klien Pyrogram secara elegan
-        try:
-            if app and app.is_connected:
-                 logging.info("Menghentikan Pyrogram client...")
-                 asyncio.run(app.stop()) # Jalankan stop di loop baru jika perlu
-                 logging.info("Pyrogram client dihentikan.")
-        except Exception as e:
-            logging.error(f"Gagal menghentikan Pyrogram client: {e}")
-
-        # Task asyncio seharusnya sudah dibatalkan oleh asyncio.run() saat dihentikan.
-        # Jika perlu kontrol lebih:
-        # loop_exists = asyncio.get_event_loop_policy().get_event_loop() # Cek jika loop ada
-        # if loop_exists and not loop_exists.is_closed():
-        #      logging.info("Membatalkan task asyncio yang tersisa...")
-        #      tasks = asyncio.all_tasks(loop=loop_exists)
-        #      tasks = [t for t in tasks if not t.done()]
-        #      if tasks:
-        #           for task in tasks: task.cancel()
-        #           try: asyncio.run(asyncio.gather(*tasks, return_exceptions=True))
-        #           except Exception as e: logging.error(f"Error saat menunggu task dibatalkan: {e}")
-
-        logging.info("Proses shutdown bot selesai.")
+    logging.info("Proses bot berakhir.")
