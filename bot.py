@@ -247,7 +247,7 @@ if __name__ == '__main__':
         # 2. Hubungkan klien Telethon
         logging.info("Connecting Telegram client...")
         loop.run_until_complete(client.connect())
-        if not loop.run_until_complete(client.is_connected()):
+        if not client.is_connected():
              logging.error("Gagal terhubung ke Telegram.")
              sys.exit(1)
         logging.info("Telegram client connected.")
