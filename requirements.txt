@@ -1,6 +1,7 @@
 telethon
 yt-dlp
-aria2p  # Jika Anda menggunakan interaksi RPC aria2c
+aiohttp
+#aria2p  # Jika Anda menggunakan interaksi RPC aria2c
 # Jika menggunakan pyppeteer:
 # pyppeteer
 # Jika menggunakan selenium:
