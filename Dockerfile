@@ -67,9 +67,9 @@ EXPOSE 6800 # Contoh port default aria2c RPC
 ENV API_ID="25315175"
 ENV API_HASH="69f20e99df186f7c694fc3ad69b7ecc4"
 ENV BOT_TOKEN="6605145904:AAEUT22p5oi_JK7U93Ld5_Ts_CK8euEHYao"
-ENV ARIA2_RPC_URL="http://localhost:6800/rpc" # Ganti jika aria2c berjalan di tempat lain
-ENV ARIA2_RPC_SECRET="" # Kosongkan jika tidak ada password
-ENV DOWNLOAD_DIR=$DOWNLOAD_DIR # Gunakan ARG DOWNLOAD_DIR yang didefinisikan di atas
+ENV ARIA2_RPC_URL="http://localhost:6800/rpc" 
+ENV ARIA2_RPC_SECRET="" 
+ENV DOWNLOAD_DIR=$DOWNLOAD_DIR 
 
 # Perintah untuk menjalankan bot saat container dijalankan
 # Gunakan python -u untuk unbuffered output (agar log muncul langsung)
