@@ -1,25 +1,21 @@
+# Gunakan base image Python slim terbaru
 FROM python:3.9-slim-buster
 
-# Set work directory di dalam container
+# Set work directory
 WORKDIR /app
 
 # Copy requirements.txt dan install dependencies Python
-# Gunakan pip install --no-cache-dir untuk menghindari cache dan mengurangi ukuran image
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # --- Instal Dependencies Sistem ---
-# Instal aria2c, ffmpeg (untuk post-processing oleh yt-dlp), dan wget/curl
-# Instal library yang dibutuhkan untuk browser headless (jika Anda menggunakannya)
-# Daftar ini mungkin perlu disesuaikan tergantung pada browser dan base image
 RUN apt-get update && apt-get install -y --no-install-recommends \
     aria2 \
     ffmpeg \
     ca-certificates \
     wget \
     curl \
-    # Dependencies umum untuk menjalankan browser headless (Chromium/Chrome)
-    # Daftar ini bisa sangat panjang dan tergantung pada distro Linux di base image
+    # Dependencies umum untuk browser headless (jika menggunakan pyppeteer/selenium)
     libnss3 \
     libfontconfig1 \
     libdbus-glib-1-2 \
@@ -41,36 +37,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libvulkan1 \
     fonts-liberation \
     xdg-utils \
-    # Membersihkan cache apt untuk mengurangi ukuran image
     && rm -rf /var/lib/apt/lists/*
 
-# Unduh binary yt-dlp standalone (disarankan)
-# Ganti dengan versi terbaru jika perlu
+# Unduh binary yt-dlp standalone
 RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp
 
-# (Alternatif) Jika Anda menginstal yt-dlp melalui pip, Anda tidak perlu mengunduh binary di atas
-# Namun, binary standalone seringkali lebih mudah dikelola dan diperbarui.
+# --- TAMBAHKAN BARIS INI UNTUK MENYALIN FILE COOKIES ---
+# Pastikan file 'cookies.txt' ada di folder yang sama dengan Dockerfile saat build!
+COPY cookies.txt .
+# --- AKHIR BARIS COPY COOKIES ---
 
-# Copy kode bot Anda ke dalam container
+# Copy kode bot Anda
 COPY bot.py .
 
 # Buat direktori unduhan
 ARG DOWNLOAD_DIR="/app/downloads"
 RUN mkdir -p $DOWNLOAD_DIR
 
-# Expose port jika Anda menjalankan aria2c RPC server di dalam container (tidak umum)
-EXPOSE 8080
+# Expose port untuk server health check
+EXPOSE 8080 
 
-# Definisikan Environment Variables untuk konfigurasi bot
-# Nilai default bisa dikosongkan atau diisi placeholder
-ENV API_ID="25315175"
-ENV API_HASH="69f20e99df186f7c694fc3ad69b7ecc4"
-ENV BOT_TOKEN="6605145904:AAEUT22p5oi_JK7U93Ld5_Ts_CK8euEHYao"
-ENV ARIA2_RPC_URL="http://localhost:6800/rpc" 
-ENV ARIA2_RPC_SECRET="" 
-ENV DOWNLOAD_DIR=$DOWNLOAD_DIR 
+# Definisikan Environment Variables
+ENV API_ID=""
+ENV API_HASH=""
+ENV BOT_TOKEN=""
+ENV DOWNLOAD_DIR=$DOWNLOAD_DIR
+ENV HEALTH_CHECK_PORT="8080"
+# --- SETEL COOKIES_FILE_PATH KE LOKASI DI DALAM CONTAINER ---
+ENV COOKIES_FILE_PATH="/app/cookies.txt" 
+# --- AKHIR SETEL ENV COOKIES_FILE_PATH ---
 
-# Perintah untuk menjalankan bot saat container dijalankan
-# Gunakan python -u untuk unbuffered output (agar log muncul langsung)
-CMD ["python", "-u", "bot.py"]
+# Perintah untuk menjalankan bot
+CMD ["python", "-u", "bot.py"] 
