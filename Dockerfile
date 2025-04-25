@@ -1,4 +1,3 @@
-# Gunakan base image Python slim terbaru untuk ukuran yang lebih kecil
 FROM python:3.9-slim-buster
 
 # Set work directory di dalam container
