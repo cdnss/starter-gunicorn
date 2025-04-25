@@ -527,155 +527,53 @@ async def handle_download_command(client: Client, message: Message):
 
 
 # --- Menjalankan Bot dan Health Check Server ---
+# --- Menjalankan Bot dan Health Check Server ---
 if __name__ == '__main__':
     logging.info("Memulai aplikasi bot dan health check server...")
-    loop = asyncio.get_event_loop() # Mendapatkan event loop asyncio yang sedang berjalan
 
-    try:
-        # 1. Mulai Health Check Server sebagai task asyncio.
-        # create_task() memungkinkan server berjalan di background tanpa memblokir.
-        health_server_task = loop.create_task(start_health_server())
+    async def main():
+        logging.info("Memulai aplikasi bot dan health check server...")
+        # 1. Mulai Health Check Server sebagai task
+        health_server_task = asyncio.create_task(start_health_server())
         logging.info("Health check server task created.")
 
-        # 2. Jalankan Pyrogram Client.
-        # app.run() adalah metode blocking di Pyrogram yang akan:
-        # - Menghubungkan ke Telegram.
-        # - Menjalankan event loop asyncio secara penuh.
-        # - Mendengarkan update (pesan, dll.).
-        # Task asyncio lain (seperti health_server_task) akan berjalan di loop yang sama.
-        logging.info("Running Pyrogram client...")
-        # Gunakan async with app: untuk manajemen siklus hidup yang lebih rapi
-        # await app.start() # Alternatif jika tidak menggunakan async with
-        loop.run_until_complete(app.start()) # Start client secara blocking di startup
-
-        if not app.is_connected:
-             logging.error("Gagal terhubung ke Telegram setelah mencoba start.")
-             sys.exit(1)
-        logging.info("Pyrogram client terhubung ke Telegram.")
-
-
-        # Run idle - Ini akan menjaga loop berjalan dan memproses event
-        # Sampai bot dihentikan (misalnya, via sinyal SIGINT/SIGTERM)
-        # asyncio.get_event_loop().run_forever() # Alternatif jika tidak pakai Pyrogram idle
-
-        # Pyrogram tidak punya idle() yang memblokir seperti telethon.
-        # client.run_until_disconnected(). app.run() sudah melakukan ini.
-        # Jika Anda sudah run app.start() di atas, Anda mungkin perlu menjalankan loop saja
-        # loop.run_forever() # Akan memblokir dan menjalankan task
-        # Atau biarkan app.run() yang menangani start/stop dan idle
+        # 2. Start Pyrogram Client (async)
+        # Ini akan terhubung dan mengotentikasi bot
+        await app.start()
+        logging.info("Pyrogram Client terhubung ke Telegram.")
         logging.info("Bot siap menerima perintah.")
-        # app.run() sudah memanggil start() dan menjalankan loop forever.
-        # Memanggil app.start() di atas dan kemudian app.run() di sini adalah redundan/salah.
-        # Cukup panggil app.run() di sini, dan itu akan menangani semuanya.
-        # ATAU panggil app.start() dan kemudian jalankan loop secara manual jika perlu kontrol lebih.
 
-        # Mari kita kembali ke struktur app.run() yang lebih sederhana untuk startup dan loop
-        # app.run() menangani start(), run_forever(), dan stop()
-        # Jadi, hapus app.start() di atas dan gunakan app.run() di sini.
-
-        # Jika Anda sudah menjalankan app.start() di atas, dan ingin loop berjalan,
-        # Anda bisa melakukan:
-        # loop.run_forever() # Ini akan menjalankan loop dan task health_server_task
-
-        # Alternatif terbaik: Gunakan async def main() dan jalankan dengan asyncio.run()
-        # Ini adalah cara modern menjalankan aplikasi asyncio.
-        async def main():
-            logging.info("Memulai aplikasi bot dan health check server...")
-            # 1. Mulai Health Check Server sebagai task
-            health_server_task = asyncio.create_task(start_health_server())
-            logging.info("Health check server task created.")
-
-            # 2. Start Pyrogram Client dan jalankan loop
-            # app.run() akan memblokir dan menjalankan loop sampai bot berhenti
-            # Ini juga akan start() client secara internal jika belum
-            logging.info("Running Pyrogram client...")
-            await app.start() # Start the client async
-            logging.info("Pyrogram client terhubung ke Telegram.")
-            logging.info("Bot siap menerima perintah.")
-
-            # Keep the event loop running by waiting indefinitely
-            # This allows the health server task and Pyrogram's internal loops to run
-            # This is an alternative to app.run() which handles start/stop and run_forever
-            # Using app.run() is often simpler if you don't need complex startup logic.
-            # If using app.start() and then run_forever():
-            # await asyncio.Future() # Runs forever until cancelled
-
-            # Revert back to simpler app.run() as it's standard for Pyrogram bots
-            # app.run() handles the async start, run_forever, and stop sequence
-
-            # Jika menggunakan app.start() di atas, dan ingin menjalankan loop secara manual:
-            # await asyncio.Future() # Ini akan membuat main() berjalan selamanya sampai di-cancel
-
-            # Cara paling bersih dengan Pyrogram async:
-            await app.start() # Connect and authenticate
-            logging.info("Pyrogram Client terhubung ke Telegram.")
-            logging.info("Bot siap menerima perintah.")
-            # Run indefinitely, processing events and running other tasks
-            await asyncio.Future() # This task never completes, keeps loop running
-
-        # Jalankan async def main()
-        # asyncio.run(main()) # Ini akan membuat loop baru, tidak cocok jika loop sudah ada
-        # Kita sudah punya loop dari app.run() sebelumnya atau get_event_loop()
-        # Gunakan run_until_complete atau Future di loop yang ada.
-
-        # Struktur akhir terbaik:
-        # Hapus semua app.start() dan run_until_complete(client.connect()) di atas.
-        # Gunakan async def main() dan jalankan dengan asyncio.run() di blok if __name__ == '__main__':
-
-        # Coba struktur async def main() dengan asyncio.run()
-        async def main():
-            logging.info("Memulai aplikasi bot dan health check server...")
-            # 1. Mulai Health Check Server sebagai task
-            health_server_task = asyncio.create_task(start_health_server())
-            logging.info("Health check server task created.")
-
-            # 2. Start Pyrogram Client (async)
-            # Ini akan terhubung dan mengotentikasi bot
-            await app.start()
-            logging.info("Pyrogram Client terhubung ke Telegram.")
-            logging.info("Bot siap menerima perintah.")
-
-            # Keep the event loop running indefinitely to process updates and tasks
-            # This await Future() will block the main coroutine until cancelled (e.g., via signal)
+        # Keep the event loop running indefinitely to process updates and tasks
+        # Use a future that is never done to keep the main coroutine alive
+        try:
+            # Menunggu future yang tidak akan pernah selesai, kecuali dibatalkan (misal: saat program dihentikan)
+            await asyncio.get_event_loop().create_future()
+        except asyncio.CancelledError:
+            logging.info("Main task cancelled. Starting shutdown.")
+        finally:
+            # Kode cleanup ini akan berjalan jika main task dibatalkan
+            logging.info("Melakukan cleanup sebelum shutdown...")
+            # Hentikan health check server task
+            health_server_task.cancel()
             try:
-                await asyncio.Future()
+                await health_server_task
             except asyncio.CancelledError:
-                logging.info("Main task cancelled. Starting shutdown.")
+                pass # Task is expected to be cancelled
 
-        # Jalankan fungsi async main()
-        # asyncio.run() akan membuat loop baru, menjalankannya sampai main() selesai, lalu menutup loop.
-        # Ini adalah cara modern yang disarankan.
+            # Hentikan klien Pyrogram
+            if app and app.is_connected:
+                 logging.info("Menghentikan Pyrogram client...")
+                 await app.stop()
+                 logging.info("Pyrogram client dihentikan.")
+
+            logging.info("Proses shutdown bot selesai.")
+
+
+    # Jalankan fungsi async main() menggunakan asyncio.run()
+    # asyncio.run() akan mengelola event loop, menjalankan main(), dan menutup loop saat main() selesai.
+    try:
         asyncio.run(main())
-
-
     except Exception as e:
         # Menangkap exception fatal saat menjalankan asyncio.run(main())
         logging.error(f"Error fatal saat menjalankan asyncio.run(main()): {e}")
         sys.exit(1) # Keluar dari proses dengan kode error
-
-    finally:
-        # Kode cleanup ini akan berjalan jika proses Python berakhir
-        logging.info("Proses bot berakhir. Melakukan cleanup...")
-
-        # Menghentikan klien Pyrogram secara elegan
-        try:
-            if app and app.is_connected:
-                 logging.info("Menghentikan Pyrogram client...")
-                 asyncio.run(app.stop()) # Jalankan stop di loop baru jika perlu
-                 logging.info("Pyrogram client dihentikan.")
-        except Exception as e:
-            logging.error(f"Gagal menghentikan Pyrogram client: {e}")
-
-        # Task asyncio seharusnya sudah dibatalkan oleh asyncio.run() saat dihentikan.
-        # Jika perlu kontrol lebih:
-        # loop_exists = asyncio.get_event_loop_policy().get_event_loop() # Cek jika loop ada
-        # if loop_exists and not loop_exists.is_closed():
-        #      logging.info("Membatalkan task asyncio yang tersisa...")
-        #      tasks = asyncio.all_tasks(loop=loop_exists)
-        #      tasks = [t for t in tasks if not t.done()]
-        #      if tasks:
-        #           for task in tasks: task.cancel()
-        #           try: asyncio.run(asyncio.gather(*tasks, return_exceptions=True))
-        #           except Exception as e: logging.error(f"Error saat menunggu task dibatalkan: {e}")
-
-        logging.info("Proses shutdown bot selesai.")
