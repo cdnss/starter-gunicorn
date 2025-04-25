@@ -1,4 +1,4 @@
-telethon
+pyrogram
 yt-dlp
 aiohttp
 #aria2p  # Jika Anda menggunakan interaksi RPC aria2c
