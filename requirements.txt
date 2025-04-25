@@ -4,4 +4,4 @@ aria2p  # Jika Anda menggunakan interaksi RPC aria2c
 # Jika menggunakan pyppeteer:
 # pyppeteer
 # Jika menggunakan selenium:
-# selenium
+# selenium 
