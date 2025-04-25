@@ -239,6 +239,95 @@ async def handle_download_command(client: Client, message: Message):
         await message.reply_text(f"Unduhan gagal untuk {url}.\nError: {error_message}")
 
 
+
+# ... (kode import, konfigurasi, fungsi download_with_ytdlp, bypass_cloudflare, dll. di bagian atas)
+
+# --- Event Handler untuk Pesan Masuk (Pyrogram) ---
+
+# Tambahkan handler ini untuk perintah /start
+@app.on_message(filters.command("start") & filters.private) # Filter: hanya perintah /start dan hanya di chat pribadi
+async def handle_start_command(client: Client, message: Message):
+    """
+    Menangani perintah /start. Mengirim pesan sambutan.
+    """
+    logging.info(f"Received /start command from chat ID: {message.chat.id}")
+
+    welcome_message = """
+Halo! 👋
+Saya adalah bot pengunduh video yang bisa mengambil video dari berbagai platform menggunakan yt-dlp.
+
+**Cara Menggunakan:**
+Kirimkan perintah `/download` diikuti dengan link video yang ingin Anda unduh.
+
+Contoh:
+`/download https://www.youtube.com/watch?v=dQw4w9WgXcQ`
+
+Saya akan berusaha mengunduh video tersebut dan mengirimkannya kepada Anda.
+
+*Pastikan Anda menggunakan perintah ini di chat pribadi dengan bot.*
+"""
+    # Mengirim pesan balasan ke pengguna
+    await message.reply_text(welcome_message, parse_mode="Markdown") # Menggunakan Markdown untuk format pesan
+
+# Handler yang sudah ada untuk perintah /download
+@app.on_message(filters.command("download") & filters.private) # Filter: hanya perintah /download dan hanya di chat pribadi
+async def handle_download_command(client: Client, message: Message):
+    """
+    Menangani perintah /download. Memproses link dan memulai unduhan.
+    """
+    # ... (kode logika /download yang sudah ada di sini)
+    chat_id = message.chat.id
+    # ... (sisa kode handle_download_command)
+
+    # Contoh memanggil bagian download yang sudah ada:
+    if len(message.command) < 2:
+        await message.reply_text("Mohon berikan URL setelah perintah /download. Contoh: `/download <link_video>`", parse_mode="Markdown")
+        return
+
+    url = message.command[1].strip()
+
+    logging.info(f"Processing download request for: {url}")
+
+    status_message = await message.reply_text(f"Memulai unduhan untuk: {url}")
+
+    loop = asyncio.get_event_loop()
+    downloaded_file_path, error_message = await loop.run_in_executor(
+        None,
+        download_with_ytdlp,
+        url
+    )
+
+    await status_message.delete() # Opsional: Hapus pesan status "Memulai unduhan"
+
+    if downloaded_file_path:
+        logging.info(f"Unduhan lokal selesai: {downloaded_file_path}. Mengirim file.")
+        try:
+            await message.reply_text("Unduhan selesai. Mengunggah file ke Telegram...")
+
+            # Mengunggah file menggunakan Pyrogram
+            await client.send_document(
+                chat_id=chat_id, # Atau message.chat.id
+                document=downloaded_file_path,
+                caption=f"✅ Unduhan selesai:\n`{url}`", # Contoh caption
+                parse_mode="Markdown"
+            )
+            logging.info(f"File {downloaded_file_path} berhasil dikirim ke {chat_id}")
+
+            # Opsional: Hapus file lokal
+            # logging.info(f"Menghapus file lokal: {downloaded_file_path}")
+            # os.remove(downloaded_file_path)
+            # logging.info(f"File {downloaded_file_path} dihapus.")
+
+        except Exception as e:
+            logging.error(f"Gagal mengirim file {downloaded_file_path} ke {chat_id}: {e}")
+            await message.reply_text(f"❌ Gagal mengirim file {os.path.basename(downloaded_file_path)}:\n`{e}`", parse_mode="Markdown")
+    else:
+        # Jika unduhan gagal
+        logging.error(f"Unduhan gagal untuk {url}. Error: {error_message}")
+        await message.reply_text(f"❌ Unduhan gagal untuk {url}.\nError: `{error_message}`", parse_mode="Markdown")
+
+
+# ... (kode health check server dan bagian if __name__ == '__main__': di bagian bawah)
 # --- Menjalankan Bot dan Health Check Server ---
 if __name__ == '__main__':
     logging.info("Memulai aplikasi bot dan health check server...")
