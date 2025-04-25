@@ -53,7 +53,7 @@ RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /us
 # Namun, binary standalone seringkali lebih mudah dikelola dan diperbarui.
 
 # Copy kode bot Anda ke dalam container
-COPY bot.py . # Ganti 'bot.py' jika nama file Anda berbeda
+COPY bot.py .
 
 # Buat direktori unduhan
 ARG DOWNLOAD_DIR="/app/downloads"
