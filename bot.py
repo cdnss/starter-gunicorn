@@ -114,7 +114,21 @@ logging.info("Pyrogram Client initialized.")
 # --- Fungsi untuk Memanggil yt-dlp ---
 # Fungsi ini menjalankan yt-dlp sebagai subprocess.
 # Ini adalah blocking I/O, jadi harus dijalankan di executor saat dipanggil dari konteks async.
-def download_with_ytdlp(url): # Tidak perlu argumen chat_id di sini, pengiriman pesan ditangani di handler
+# --- Konfigurasi Cookies (untuk situs seperti YouTube yang butuh login/verifikasi) ---
+# Path ke file cookies.txt di dalam container
+# Setel Environment Variable COOKIES_FILE_PATH saat menjalankan container Docker/Koyeb
+COOKIES_FILE_PATH = os.environ.get("COOKIES_FILE_PATH")
+if COOKIES_FILE_PATH:
+    logging.info(f"Cookies file path set: {COOKIES_FILE_PATH}")
+    # Opsional: Periksa apakah file cookies benar-benar ada saat startup bot
+    # Ini bisa membantu debugging, tapi mungkin file belum di-mount saat kode ini dijalankan.
+    # if not os.path.exists(COOKIES_FILE_PATH):
+    #    logging.warning(f"File cookies tidak ditemukan di: {COOKIES_FILE_PATH}")
+    #    # Tidak setel ke None di sini, biarkan yt-dlp yang error jika file tidak ada saat dipanggil.
+
+
+# --- Fungsi untuk Memanggil yt-dlp ---
+def download_with_ytdlp(url):
     """
     Menjalankan yt-dlp untuk mengunduh video dari URL yang diberikan.
     Mengembalikan path file yang diunduh atau None jika gagal, beserta pesan error.
@@ -122,35 +136,43 @@ def download_with_ytdlp(url): # Tidak perlu argumen chat_id di sini, pengiriman 
     try:
         logging.info(f"Menjalankan yt-dlp untuk mengunduh: {url}")
 
-        # Opsi yt-dlp:
-        # -o: Lokasi output. Menggunakan %(title)s dan %(ext)s untuk nama file otomatis di DOWNLOAD_DIR.
-        # --restrict-filenames: Membersihkan nama file agar kompatibel.
-        # --no-warnings: Jangan tampilkan peringatan yt-dlp.
-        # --progress: Memungkinkan parsing progress (jika diperlukan implementasi real-time).
-        # --external-downloader aria2c: Menggunakan aria2c sebagai downloader eksternal (jika terinstal dan di PATH).
-        # --external-downloader-args: Argumen tambahan untuk aria2c (misalnya, -x16 untuk 16 koneksi).
         output_template = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
 
+        # Base command
         ytdlp_command = [
             "yt-dlp",
-            "--ignore-errors", # Lanjutkan jika ada error kecil pada satu file (playlist)
+            "--ignore-errors",
             "--restrict-filenames",
             "--no-warnings",
             "--progress",
             "-o", output_template,
-            "--external-downloader", "aria2c", # Menggunakan aria2c (pastikan terinstal di Dockerfile)
-            "--external-downloader-args", "aria2c:\"-x16 -s16 -k1M\"", # Contoh argumen aria2c
-            url # URL target
+            "--external-downloader", "aria2c",
+            "--external-downloader-args", "aria2c:\"-x16 -s16 -k1M\"",
+            # Argumen tambahan lainnya jika diperlukan, misalnya:
+            # --geo-bypass # Untuk mencoba bypass pembatasan geografis
+            # --limit-rate 100K # Membatasi kecepatan (contoh: 100 KB/s)
+            # --retries 5 # Coba ulang unduhan yang gagal
         ]
+
+        # --- Tambahkan argumen cookies jika COOKIES_FILE_PATH disetel ---
+        if COOKIES_FILE_PATH and os.path.exists(COOKIES_FILE_PATH): # Pastikan path disetel dan file ada
+             logging.info(f"Menambahkan argumen cookies: --cookies {COOKIES_FILE_PATH}")
+             ytdlp_command.extend(["--cookies", COOKIES_FILE_PATH]) # Menambahkan 2 elemen ke list
+        elif COOKIES_FILE_PATH:
+             # Jika COOKIES_FILE_PATH disetel tapi file tidak ada, log peringatan
+             logging.warning(f"COOKIES_FILE_PATH disetel ({COOKIES_FILE_PATH}), tetapi file tidak ditemukan. Unduhan mungkin gagal untuk situs yang membutuhkan cookies.")
+        # --- Akhir penambahan argumen cookies ---
+
+        # Tambahkan URL sebagai elemen terakhir
+        ytdlp_command.append(url)
 
         logging.info(f"Perintah dijalankan: {' '.join(ytdlp_command)}")
 
         # Menjalankan subprocess.run bersifat blocking
-        # Capture output untuk logging atau debugging
         process = subprocess.run(ytdlp_command, capture_output=True, text=True)
 
-        logging.debug(f"yt-dlp stdout:\n{process.stdout}")
-        logging.debug(f"yt-dlp stderr:\n{process.stderr}")
+        # ... (sisa kode untuk memeriksa return code, parsing info -j, menemukan file, dan return) ...
+        # Pastikan logic return None, error_message tetap dipertahankan di bagian bawah fungsi.
 
         if process.returncode != 0:
             error_message = process.stderr.strip() or f"yt-dlp failed with exit code {process.returncode}"
@@ -158,31 +180,26 @@ def download_with_ytdlp(url): # Tidak perlu argumen chat_id di sini, pengiriman 
             return None, error_message # Kembalikan None dan pesan error
 
         # --- Menemukan File yang Diunduh ---
-        # Cara paling handal adalah mendapatkan info JSON dari yt-dlp (-j)
-        # dan mencoba menemukan path file dari sana.
+        # Kode ini tetap sama, mengambil info dari yt-dlp -j untuk menemukan path file
+        # ... (kode parsing info_process dan menemukan downloaded_file_path) ...
         info_command = ["yt-dlp", "-j", url]
         info_process = subprocess.run(info_command, capture_output=True, text=True)
+        # ... (lanjutkan parsing info_process dan return path/error) ...
 
         downloaded_file_path = None
         if info_process.returncode == 0:
             try:
                 info = json.loads(info_process.stdout)
-                # yt-dlp v2023.11.16+ menambahkan properti 'filepath' saat menggunakan -o
                 downloaded_file_path = info.get('filepath')
 
                 if not downloaded_file_path:
-                     # Jika 'filepath' tidak ada, coba rekonstruksi dari template output dan info
-                     # Ini kurang akurat dan mungkin tidak cocok dengan --restrict-filenames
                      expected_filename = f"{info.get('title', 'download')}.{info.get('ext', 'mp4')}"
                      downloaded_file_path = os.path.join(DOWNLOAD_DIR, expected_filename)
                      logging.warning(f"Properti 'filepath' tidak ditemukan di output -j. Mencoba merekonstruksi path: {downloaded_file_path}. Ini mungkin tidak akurat.")
 
-                logging.info(f"Diperkirakan file terunduh di: {downloaded_file_path}")
-
-                # Pastikan file benar-benar ada setelah unduhan selesai
                 if downloaded_file_path and os.path.exists(downloaded_file_path):
                     logging.info(f"File ditemukan: {downloaded_file_path}")
-                    return downloaded_file_path, None # Kembalikan path dan None (tidak ada error)
+                    return downloaded_file_path, None
                 else:
                     error_message = f"File tidak ditemukan setelah unduhan selesai: {downloaded_file_path}"
                     logging.error(error_message)
@@ -206,6 +223,8 @@ def download_with_ytdlp(url): # Tidak perlu argumen chat_id di sini, pengiriman 
         logging.error(error_message)
         return None, error_message
 
+
+# ... (kode fungsi bypass_cloudflare, event handlers Pyrogram, dan if __name__ == '__main__':)
 # --- Fungsi untuk Menangani Cloudflare (Sangat Kompleks, Hanya Kerangka) ---
 # Fungsi ini akan sangat bervariasi tergantung situs dan metode bypass yang digunakan (pyppeteer/selenium)
 # Jika Anda mengimplementasikan ini, pastikan library yang relevan terinstal dan dependencies sistem ada di Dockerfile.
