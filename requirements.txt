@@ -5,4 +5,4 @@ aiohttp
 # Jika menggunakan pyppeteer:
 # pyppeteer
 # Jika menggunakan selenium:
-# selenium 
+# selenium
