@@ -18,9 +18,9 @@ logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s'
                     level=logging.INFO) # Naikkan level ke INFO atau WARNING untuk mengurangi log
 
 # --- Konfigurasi Bot ---
-API_ID = os.environ.get("API_ID")
-API_HASH = os.environ.get("API_HASH")
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+API_ID = 25315175 #os.environ.get("API_ID")
+API_HASH = "69f20e99df186f7c694fc3ad69b7ecc4" #os.environ.get("API_HASH")
+BOT_TOKEN = "6605145904:AAEUT22p5oi_JK7U93Ld5_Ts_CK8euEHYao"#os.environ.get("BOT_TOKEN")
 
 if not BOT_TOKEN:
     logging.error("Error: Environment variable BOT_TOKEN tidak disetel.")
